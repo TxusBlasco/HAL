@@ -10,4 +10,8 @@ Python 3.8
 Pending from first commit to master branch
 
 ## ARCHITECTURE
-pending
+Use cases: 
+![Use_cases](pics/HAL_design_v0_9_1_Use_cases.png)
+
+Database design:
+![Database_design](pics/HAL_design_v0_9_1_InfluxDB_tables_design.png)
