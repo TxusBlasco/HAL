@@ -10,3 +10,4 @@ Python 3.8
 Pending from first commit to master branch
 
 ## ARCHITECTURE
+pending
