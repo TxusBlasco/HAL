@@ -31,7 +31,7 @@ class DataLoading:
 
     # Extracts all the CLOSE candles from 6AM to 3AM of the previous day (price data from last day)
     # for each instrument on the list self.insts
-    def get_training_df(self):
+    def get_training_df(self) -> dict:
         print('[INFO] Running', self.get_training_df)
         client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
         query_api = client.query_api()
@@ -43,7 +43,7 @@ class DataLoading:
                          '|> filter(fn: (r) => r["_measurement"] == "%s") ' \
                          '|> filter(fn: (r) => r["_field"] == "%s") ' \
                          '|> filter(fn: (r) => r["inst"] == "%s") ' \
-                         '|> filter(fn: (r) => r["price_comp"] == "%s") ' \
+                         '|> filter(fn: (r) => r["comp"] == "%s") ' \
                          % (self.bucket, self.start_query, self.stop_query, self.meas, self.field, inst, self.comp)
                 data_frame = query_api.query_data_frame(query)
                 inst_dict[inst] = pd.DataFrame(data_frame)

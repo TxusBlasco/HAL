@@ -75,17 +75,16 @@ class DataExtraction:
             response = requests.get(get_url, headers=head)
             js = json.loads(response.content)
             response.raise_for_status()
-            print("[INFO] Status code: {}".format(response.status_code))
         except requests.exceptions.HTTPError as e:
             print("[ERROR] Error: " + str(e))
         else:
             price_dict = {
                 'status_code': response.status_code,
                 'timestamp': js['candles'][0]['time'],
-                'open_price': float(js['candles'][0]['mid']['o']),
-                'higher_price': float(js['candles'][0]['mid']['h']),
-                'lower_price': float(js['candles'][0]['mid']['l']),
-                'close_price': float(js['candles'][0]['mid']['c'])
+                'open': float(js['candles'][0]['mid']['o']),
+                'higher': float(js['candles'][0]['mid']['h']),
+                'lower': float(js['candles'][0]['mid']['l']),
+                'close': float(js['candles'][0]['mid']['c'])
             }
             return price_dict
 
@@ -93,26 +92,26 @@ class DataExtraction:
     # { 'EUR_USD:
     #       {   'status_code': 200
     #           'timestamp': 2020-11-19T06:48:00.000000000Z
-    #           'open_price': 1.6721,
-    #           'higher_price': 1.7554,
-    #           'lower_price': 1.3454,
-    #           'close_price': 1.6543
+    #           'open': 1.6721,
+    #           'higher': 1.7554,
+    #           'lower': 1.3454,
+    #           'close': 1.6543
     #       },
     # { 'EUR_JPY:
     #       {   'status_code': 200
     #           'timestamp': 2020-11-19T06:48:00.000000000Z
-    #           'open_price': 1.6721,
-    #           'higher_price': 1.7554,
-    #           'lower_price': 1.3454,
-    #           'close_price': 1.6543
+    #           'open': 1.6721,
+    #           'higher': 1.7554,
+    #           'lower': 1.3454,
+    #           'close': 1.6543
     #       },
     # { 'EUR_AUD:
     #       {   'status_code': 200
     #           'timestamp': 2020-11-19T06:48:00.000000000Z
-    #           'open_price': 1.6721,
-    #           'higher_price': 1.7554,
-    #           'lower_price': 1.3454,
-    #           'close_price': 1.6543
+    #           'open': 1.6721,
+    #           'higher': 1.7554,
+    #           'lower': 1.3454,
+    #           'close': 1.6543
     #       }
     # }
     def inst_dict_constructor(self):

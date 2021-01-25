@@ -7,25 +7,29 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from joblib import dump, load
-from keras.models import Sequential  # pip install tensorflow
-from keras.layers import Dense
-from keras.layers import LSTM
-from keras.layers import Dropout
-from keras.models import model_from_json
-from keras.models import load_model
-from keras.backend import manual_variable_initialization
+from tensorflow.keras.models import Sequential  # pip install tensorflow
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import LSTM
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.models import model_from_json
+from tensorflow.keras.models import load_model
+from tensorflow.keras.backend import manual_variable_initialization
 manual_variable_initialization(True)
 from datetime import datetime
 import time
 
+
 class DataLoadingError(Exception):
     pass
+
 
 class ModelLoadingError(Exception):
     pass
 
+
 class ScalerLoadingError(Exception):
     pass
+
 
 class DataPrediction():
     def __init__(self, insts: list, meas: str, comp: str, field: str):
@@ -99,10 +103,15 @@ class DataPrediction():
         for i in range(60, len(inputs)):
             x_test.append(inputs[i-60:i])
         x_test = np.array(x_test)
+        print('x_test.shape[0]', x_test.shape[0])
+        print('x_test.shape[1]', x_test.shape[1])
         x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))  # Reshape data structure
         # shape[0] = dimension of rows
         # shape[1] = dimension of columns
         # 1 is a new unit dimension axis
+
+        print()
+
         predicted_data_set = loaded_model.predict(x_test)
         predicted_data_set = sc.inverse_transform(predicted_data_set)
 
@@ -110,13 +119,12 @@ class DataPrediction():
         score_test = loaded_model.evaluate(x_test, predicted_data_set, verbose=0)
         print("[INFO] %s during testing: %.2f%%" % (loaded_model.metrics_names[1], score_test[1]*100))
 
-        plt.plot(test_df, color='blue', label='raw data')
-        plt.plot(predicted_data_set, color='red', label='predicted price data stream')
-        plt.show()
+        # plt.plot(test_df, color='blue', label='raw data')
+        # plt.plot(predicted_data_set, color='red', label='predicted price data stream')
+        # plt.show()
         return {'test_score': score_test[1]*100,
                 'predicted_data': predicted_data_set}
 
-    # TODO unit testing
     # predicts just one value based on a series of values inside a pandas dataframe
     # this method is thought to be called recurrently to predict a changing series in progress using "time" library
     def dynamic_predictor(self, pred_df: pd.DataFrame, model_path: str, scaler_path: str) -> float:
@@ -125,8 +133,8 @@ class DataPrediction():
         inputs = pred_df.to_numpy()
         inputs = inputs.reshape(-1, 1)
         inputs = loaded_scaler.transform(inputs)
-        x_test = [inputs[-60:]]
-        x_test = np.array(x_test)
+        #x_test = [inputs[-60:]]
+        x_test = np.array(inputs)
         x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))  # Reshape data structure
         pred_data_set = loaded_model.predict(x_test)
         pred_data_set = loaded_scaler.inverse_transform(pred_data_set)

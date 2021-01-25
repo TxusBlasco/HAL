@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 import schedule  # pip install schedule
 import config_data.constants as conf
 import pandas as pd
+from txus_library import txuslib
 
 
 class DataExtractionError(Exception):
@@ -51,18 +52,18 @@ class TaskManager:
         self.friday_end_trade_time = friday_end_trade_time
 
     # gets the last value of price from the broker API
-    def data_extract(self, inst: str) -> dict:
-        de = dext.DataExtraction(inst=inst, gran=self.gran, comp=self.comp)
+    def data_extract(self) -> dict:
+        de = dext.DataExtraction(insts=self.insts, gran=self.gran, comp=self.comp)
         try:
-            price_dict = de.get_last_candle_from_db()
-            return price_dict
+            inst_dict = de.inst_dict_constructor()
+            return inst_dict
         except DataExtractionError:
             print('[ERROR] Data could not be extracted')
 
     # TODO return transformed price
     # saves extracted and transformed data in the Influx DB database
-    def data_transform(self, inst: str, price_dict: dict):
-        dt = dtrans.DataTransformation(inst=inst, price_dict=price_dict, meas=self.meas, comp=self.comp)
+    def data_transform(self, inst_dict: dict):
+        dt = dtrans.DataTransformation(inst_dict=inst_dict, meas=self.meas, comp=self.comp)
         try:
             dt.set_price_data_db()
             trans_price = 'pending'
@@ -71,10 +72,10 @@ class TaskManager:
             print('[ERROR] Data could not be transformed')
 
     # based on the last 60 values of data, predicts the next price value
-    def data_predict(self, pred_df: pd.DataFrame) -> float:
+    def data_predict(self, pred_df: pd.DataFrame, model_path=conf.MODEL_PATH, scaler_path=conf.SCALER_PATH) -> float:
         dp = dpred.DataPrediction(insts=self.insts, meas=self.meas, comp=self.comp, field=self.field)
         try:
-            pred_price = dp.dynamic_predictor(pred_df=pred_df, model_path=conf.MODEL_PATH, scaler_path=conf.SCALER_PATH)
+            pred_price = dp.dynamic_predictor(pred_df=pred_df, model_path=model_path, scaler_path=scaler_path)
             return pred_price
         except DataPredictionError:
             print('[ERROR] Data could not be predicted')
@@ -97,39 +98,49 @@ class TaskManager:
             return False
 
     # for each instrument, extracts stream data from Oanda, saves it in InfluxDB and predicts next price value
-    def etp_job(self) -> dict:  # job: Extract, Transform and Predict data
+    def etp_job(self, is_etl_testing=False, is_etlp_testing=False) -> dict:  # job: Extract, Transform and Predict data
         print('[INFO] running: ', self.etp_job)
-        print('[INFO] Starting trading now at ', datetime.now())
+        print('[INFO] running: %s at %s' % (self.etp_job, datetime.now().strftime("%Y-%M-%D_%H:%M")))
         pred_df = pd.DataFrame()
         ext_df = pd.DataFrame()
         ext_dict = {}
         pred_dict = {}
         data_ext_counter = 0
         while True:
-            for inst in self.insts:  # perform ETL for each instrument
-                ext_price_dict = self.data_extract(inst=inst)
-                ext_dict[inst] = ext_price_dict['c']
-                trans_price = self.data_transform(inst=inst, price_dict=ext_price_dict['c'])
-            aux_ext_df = pd.DataFrame.from_dict(ext_dict)
+            ext_inst_dict = self.data_extract()
+            trans_price = self.data_transform(inst_dict=ext_inst_dict)
+            aux_ext_df = txuslib.df_from_inst_dict(inst_dict=ext_inst_dict, field=self.field)
             ext_df = ext_df.append(aux_ext_df, ignore_index=True)
             if data_ext_counter >= 60:
                 for inst in self.insts:  # perform prediction for each instrument
                     # TODO: now data_predict can only predict one instrument, not a dict of instruments
                     # TODO: however, the rest of ETPL is prepared to manage a dictionary of instruments
-                    pred_price = self.data_predict(ext_df[inst].iloc[-60:])
+                    if is_etlp_testing:
+                        pred_price = self.data_predict(
+                            pred_df=ext_df[inst].iloc[-60:],
+                            model_path=conf.TESTING_MODEL_PATH,
+                            scaler_path=conf.TESTING_SCALER_PATH)
+                    else:
+                        pred_price = self.data_predict(ext_df[inst].iloc[-60:])
                     pred_dict[inst] = pred_price
             aux_pred_df = pd.DataFrame.from_dict(pred_dict)
             pred_df = pred_df.append(aux_pred_df, ignore_index=True)
-
-            print('[INFO] extracted data: ', ext_df.iloc[-1:])
-            print('[INFO] predicted data: ', pred_df.iloc[-1:])
-
-
-
+            print('---------------------------------------------------------------------------------------------------')
+            print('[INFO] extracted data:')
+            print(ext_df.iloc[-1:])
+            print('---------------------------------------------------------------------------------------------------')
+            print('[INFO] predicted data:')
+            print(pred_df.iloc[-1:])
+            print('---------------------------------------------------------------------------------------------------')
             if self.is_training_time():
                 break
             if self.is_end_of_trading_time():
                 break
+            if is_etl_testing:
+                break
+            if is_etlp_testing and data_ext_counter > 65:
+                break
+
             data_ext_counter += 1
             time.sleep(5)
         return {'current_date_time': datetime.now().strftime("%Y-%M-%D_%H:%M"),
@@ -139,7 +150,7 @@ class TaskManager:
     # train the algorithm with data from the previous day
     # should finish the training before the planned daily start of trading
     def train_job(self):
-        print('[INFO] running: ', self.train_job)
+        print('[INFO] running: %s at %s' % (self.train_job, datetime.now().strftime("%Y-%M-%D_%H:%M")))
         try:
             dp = dpred.DataPrediction(insts=self.insts, comp=self.comp, meas=self.meas, field=self.field)
             dp.daily_train_test()
@@ -149,28 +160,37 @@ class TaskManager:
     # plan all the weekly tasks
     def cron(self):
         print('[INFO] running: ', self.cron)
-        schedule.every().sunday.at(self.sunday_trade_time).do(self.etp_job)  # Sydney session opens
-        schedule.every().monday.at(self.training_time).do(self.train_job)
-        schedule.every().monday.at(self.trading_time).do(self.etp_job)
-        schedule.every().tuesday.at(self.training_time).do(self.train_job)
-        schedule.every().tuesday.at(self.trading_time).do(self.etp_job)
-        schedule.every().wednesday.at(self.training_time).do(self.train_job)
-        schedule.every().wednesday.at(self.trading_time).do(self.etp_job)
-        schedule.every().thursday.at(self.training_time).do(self.train_job)
-        schedule.every().thursday.at(self.trading_time).do(self.etp_job)
-        schedule.every().friday.at(self.training_time).do(self.train_job)
-        schedule.every().friday.at(self.trading_time).do(self.etp_job)  # New york session closes at 22h
+        schedule.every().sunday.at(self.sunday_trade_time).do(self.etp_job).tag('trade')  # Sydney session opens
+        schedule.every().monday.at(self.training_time).do(self.train_job).tag('train')
+        schedule.every().monday.at(self.trading_time).do(self.etp_job).tag('trade')
+        schedule.every().tuesday.at(self.training_time).do(self.train_job).tag('train')
+        schedule.every().tuesday.at(self.trading_time).do(self.etp_job).tag('trade')
+        schedule.every().wednesday.at(self.training_time).do(self.train_job).tag('train')
+        schedule.every().wednesday.at(self.trading_time).do(self.etp_job).tag('trade')
+        schedule.every().thursday.at(self.training_time).do(self.train_job).tag('train')
+        schedule.every().thursday.at(self.trading_time).do(self.etp_job).tag('trade')
+        schedule.every().friday.at(self.training_time).do(self.train_job).tag('train')
+        schedule.every().friday.at(self.trading_time).do(self.etp_job).tag('trade')   # New york session closes at 22h
+        print('[INFO] List of scheduled jobs: ')
+        for job in schedule.jobs:
+            print('[INFO]', job)
+        print('[INFO] Next run is on: ', schedule.next_run())
+        if conf.TRAINING_TIME in str(schedule.next_run()):
+            print('[INFO] Populating data for the next training job')
+            self.etp_job()
 
 
 def main():
     # TODO in future releases, the list of insts will be decided by an expert system
     # TODO now, only eur/usd trading is applied
-    insts = ['EUR_USD']
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.expand_frame_repr', False)
+    insts = ['EUR_USD', 'EUR_JPY', 'EUR_AUD', 'EUR_CHF', 'EUR_GBP']
     gran = "S5"  # 5 seconds per API request
     comp = "M"
     meas = "raw_price"
-    price_field = 'close_price'
-    tm = TaskManager(insts, gran, comp, meas, price_field)
+    field = 'close'
+    tm = TaskManager(insts=insts, gran=gran, comp=comp, meas=meas, field=field)
     tm.cron()
     while True:
         schedule.run_pending()

@@ -16,18 +16,12 @@ class DataTransformation:
     ####################################################################################################################
     """
 
-    def __init__(self, price_dict: dict, insts: list, meas: str, comp: str, bucket='bucket'):
-        self.price_dict = price_dict
+    def __init__(self, inst_dict: dict, meas: str, comp: str, bucket='bucket'):
+        self.inst_dict = inst_dict
         self.token = txuslib.get_data_from_yaml(conf.OANDA_TOKEN_PATH)['InfluxDB']['token']
         self.org = txuslib.get_data_from_yaml(conf.OANDA_TOKEN_PATH)['InfluxDB']['org']
         self.bucket = txuslib.get_data_from_yaml(conf.OANDA_TOKEN_PATH)['InfluxDB'][bucket]
         self.url = txuslib.get_data_from_yaml(conf.OANDA_TOKEN_PATH)['InfluxDB']['url']
-        self.timestamp = price_dict['timestamp']  # time
-        self.open_price = price_dict['open_price']  # field value
-        self.higher_price = price_dict['higher_price']  # field value
-        self.lower_price = price_dict['lower_price']  # field value
-        self.close_price = price_dict['close_price']  # field value
-        self.insts = insts  # list of instruments (ex: EUR_USD) (tag key)
         self.meas = meas  # meas (raw_price or pred_price)
         self.comp = comp  # comp (bid, ask or mid) (tag key)
 
@@ -41,15 +35,15 @@ class DataTransformation:
         client = InfluxDBClient(url=self.url, token=self.token)
         write_api = client.write_api(write_options=SYNCHRONOUS)
         query_list = []
-        for inst in self.insts:
+        for inst in self.inst_dict.keys():
             # Line protocol:
-            o = '%s,inst=%s,price_comp=%s open_price=%s' % (self.meas, inst, self.comp, self.open_price)
-            h = '%s,inst=%s,price_comp=%s higher_price=%s' % (self.meas, inst, self.comp, self.higher_price)
-            l = '%s,inst=%s,price_comp=%s lower_price=%s' % (self.meas, inst, self.comp, self.lower_price)
-            c = '%s,inst=%s,price_comp=%s close_price=%s' % (self.meas, inst, self.comp, self.close_price)
+            o = '%s,inst=%s,comp=%s open=%s' % (self.meas, inst, self.comp, self.inst_dict[inst]['open'])
+            h = '%s,inst=%s,comp=%s higher=%s' % (self.meas, inst, self.comp, self.inst_dict[inst]['higher'])
+            l = '%s,inst=%s,comp=%s lower=%s' % (self.meas, inst, self.comp, self.inst_dict[inst]['lower'])
+            c = '%s,inst=%s,comp=%s close=%s' % (self.meas, inst, self.comp, self.inst_dict[inst]['close'])
             aux_list = [o, h, l, c]
             query_list.append(aux_list)
-        query_list_reshaped = list(np.reshape(query_list, len(self.insts)*4))
+        query_list_reshaped = list(np.reshape(query_list, len(self.inst_dict)*4))
         try:
             write_api.write(self.bucket, self.org, query_list_reshaped)
             write_api.__del__()

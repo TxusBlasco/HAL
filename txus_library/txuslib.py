@@ -6,7 +6,7 @@ import os
 import json
 import math
 import datetime
-import GlobalConstants
+import config_data.constants as conf
 import numpy as np
 from sklearn.metrics import mean_squared_error
 import yaml
@@ -106,11 +106,11 @@ auxiliary methods for operations over the Oanda API
 # returns that time in oanda json format
 def get_close_time_from_candle(js):
     # print('[INFO] str(js[\'candles\'][-1][\'complete\']) =', js['candles'][-1]['complete'])
-    if js['candles'][-1]['complete'] == True:
+    if js['candles'][-1]['complete'] == 'true':
         close_time = js['candles'][-1]['time']
         print("[INFO] Close date from last candle: {}".format(close_time))
         return close_time
-    elif js['candles'][-2]['complete'] == True:
+    elif js['candles'][-2]['complete'] == 'true':
         close_time = js['candles'][-2]['time']
         return close_time
     else:
@@ -121,24 +121,20 @@ def get_close_time_from_candle(js):
 # retrieves the price value from the json corresponding to the close price for the last candle that is complete
 # returns that price as a float
 def get_open_price_from_candle(js):
-    if js["candles"][-1]['complete'] == True:
+    if js["candles"][-1]['complete'] == 'true':
         open_price = float(js["candles"][-1]["mid"]["o"])
         return open_price
-    elif js["candles"][-2]['complete'] == True:
+    elif js["candles"][-2]['complete'] == 'true':
         open_price = float(js["candles"][-2]["mid"]["o"])
         return open_price
     else:
         print('[ERROR] Wrong value executing method get_open_price_from_candle')
 
-
-
-
-
 def get_higher_price_from_candle(js):
-    if js["candles"][-1]['complete'] == True:
+    if js["candles"][-1]['complete'] == 'true':
         higher_price = float(js["candles"][-1]["mid"]["h"])
         return higher_price
-    elif js["candles"][-2]['complete'] == True:
+    elif js["candles"][-2]['complete'] == 'true':
         higher_price = float(js["candles"][-2]["mid"]["h"])
         return higher_price
     else:
@@ -146,10 +142,10 @@ def get_higher_price_from_candle(js):
 
 
 def get_lower_price_from_candle(js):
-    if js["candles"][-1]['complete'] == True:
+    if js["candles"][-1]['complete'] == 'true':
         lower_price = float(js["candles"][-1]["mid"]["l"])
         return lower_price
-    elif js["candles"][-2]['complete'] == True:
+    elif js["candles"][-2]['complete'] == 'true':
         lower_price = float(js["candles"][-2]["mid"]["l"])
         return lower_price
     else:
@@ -157,11 +153,11 @@ def get_lower_price_from_candle(js):
 
 
 def get_close_price_from_candle(js):
-    if js["candles"][-1]['complete'] == True:
-        close_price = float(js["candles"][-1]["mid"]["c"])
+    if js['candles'][-1]['complete'] == 'true':
+        close_price = float(js['candles'][-1]['mid']['c'])
         return close_price
-    elif js["candles"][-2]['complete'] == True:
-        close_price = float(js["candles"][-2]["mid"]["c"])
+    elif js['candles'][-2]['complete'] == 'true':
+        close_price = float(js['candles'][-2]['mid']['c'])
         return close_price
     else:
         print('[ERROR] Wrong value executing method get_close_price_from_candle')
@@ -264,7 +260,7 @@ def conv_oanda_json_to_x_www_form_url_encoded(date):
 # The real number of candles is always equal or less to the estimate
 def get_nb_candles_two_dates(start_date, end_date, granularity):
     nb_sec = get_nb_seconds(start_date, end_date)
-    gran_sec = GlobalConstants.granularity_to_seconds[granularity]
+    gran_sec = conf.granularity_to_seconds[granularity]
     week_seconds = 604800
     weekend_seconds = 172800
     nb_weekends = round_down(nb_sec/week_seconds)
@@ -363,9 +359,9 @@ def moving_average(data_array: pd.DataFrame, win_length=1, del_nan=False, ma_typ
 
 # Linearly weighted moving average
 # gets an array with prices and returns an array with the wma
-def linear_wma(data_array: pd.DataFrame, shift=0, window_length=1):
-    weights = np.arange(1, window_length + 1)
-    wma = data_array.rolling(window_length).apply(lambda prices: np.dot(prices, weights/weights.sum()))
+def linear_wma(data_array: pd.DataFrame, shift=0, win_len=1):
+    weights = np.arange(1, win_len + 1)
+    wma = data_array.rolling(win_len).apply(lambda prices: np.dot(prices, weights/weights.sum()))
     wma = wma.shift(periods=shift)
     return wma
 
@@ -409,3 +405,18 @@ def plot_real_time_price_lstm(time_array, price_array, prediction):
     plt.draw()
     plt.pause(0.0001)
     plt.clf()
+
+
+''' 
+#######################################################################################################################
+auxiliary methods for data operations
+#######################################################################################################################
+'''
+
+
+def df_from_inst_dict(inst_dict:dict, field:str) -> pd.DataFrame:
+    aux_dict = {}
+    for inst in inst_dict.keys():
+        aux_dict[inst] = inst_dict[inst][field]
+    df = pd.DataFrame(aux_dict, index=[0])
+    return df
