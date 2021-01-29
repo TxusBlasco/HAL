@@ -2,6 +2,7 @@ from influxdb_client import InfluxDBClient  # pip install influxdb-client[extra]
 from txus_library import txuslib
 import config_data.constants as conf
 import pandas as pd
+from datetime import datetime
 
 
 class ApiQueryError(Exception):
@@ -32,7 +33,7 @@ class DataLoading:
     # Extracts all the CLOSE candles from 6AM to 3AM of the previous day (price data from last day)
     # for each instrument on the list self.insts
     def get_training_df(self) -> dict:
-        print('[INFO] Running', self.get_training_df)
+        print('[INFO] running: %s at %s' % (self.get_training_df, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
         client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
         query_api = client.query_api()
         inst_dict = {}

@@ -2,6 +2,7 @@ import unittest
 from data_extraction import data_extraction as dext
 from data_transformation import data_transformation as dtrans
 from task_manager import task_manager as tman
+from data_prediction import data_prediction as dpred
 import time
 from datetime import datetime, timedelta
 import schedule  # pip install necessary
@@ -12,6 +13,14 @@ from data_loading import data_loading as dload
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+
+class IntegrationTestDataPrediction(unittest.TestCase):
+    def test_get_training_data(self):
+        # NOT TESTED, THIS METHOD IS INCLUDED IN DAILY_TRAIN_TEST
+        pass
+
+
 
 
 class IntegrationTestDataExtraction(unittest.TestCase):

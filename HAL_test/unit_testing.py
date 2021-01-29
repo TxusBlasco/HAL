@@ -12,6 +12,7 @@ import os
 from datetime import date
 import shutil
 from pandas._testing import assert_frame_equal
+from random import random
 
 
 class TestDataExtraction(unittest.TestCase):
@@ -33,11 +34,13 @@ class TestDataPrediction(unittest.TestCase):
         dataset_train = pd.read_csv(conf.TESTING_TRAIN_CSV)
         df_filt = dataset_train[['c']]
         dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
-        score = float(dp.lstm_trainer(df_filt))
+        score = float(dp.lstm_trainer(train_df=df_filt, inst='EUR_USD'))
         self.assertTrue(score < 1, msg='[TEST FAIL] Calculation error is higher than 0.3')
-        self.assertTrue(os.path.exists(conf.SCALER_PATH),
-                        msg='[TEST FAIL] %s file does not exist' % conf.SCALER_PATH)
-        self.assertTrue(os.path.exists(conf.MODEL_PATH), msg='[TEST FAIL] %s file does not exist' % conf.MODEL_PATH)
+        self.assertTrue(os.path.exists(conf.SCALER_PATH % 'EUR_USD'),
+                        msg='[TEST FAIL] %s file does not exist' % conf.SCALER_PATH % 'EUR_USD')
+        self.assertTrue(
+            os.path.exists(conf.MODEL_PATH % 'EUR_USD'),
+            msg='[TEST FAIL] %s file does not exist' % conf.MODEL_PATH % 'EUR_USD')
         try:
             shutil.rmtree(conf.MODEL_DIR)  # removes the folder after the test
         except OSError as e:
@@ -46,20 +49,21 @@ class TestDataPrediction(unittest.TestCase):
 
     def test_lstm_tester(self):
         print('[INFO] running', self.test_lstm_tester)
+        insts = ['EUR_USD']
         try:
             os.makedirs(conf.MODEL_DIR)
         except OSError as e:
             print("[ERROR] test_lstm_trainer. Creation of the directory %s failed : %s " % (conf.MODEL_DIR, e.strerror))
-
-        shutil.copyfile(conf.TESTING_MODEL_PATH, conf.MODEL_PATH)
-        shutil.copyfile(conf.TESTING_SCALER_PATH, conf.SCALER_PATH)
+        for inst in insts:
+            shutil.copyfile(conf.TESTING_MODEL_PATH, conf.MODEL_PATH % inst)
+            shutil.copyfile(conf.TESTING_SCALER_PATH, conf.SCALER_PATH % inst)
 
         dataset_test = pd.read_csv(conf.TESTING_TEST_CSV)
 
         df_filt = dataset_test[['c']].iloc[-100:]
         df_filt = df_filt.reset_index(drop=True)
-        dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
-        ret = dp.lstm_tester(df_filt)
+        dp = dpred.DataPrediction(insts=insts, meas='raw_price', comp='M', field='close')
+        ret = dp.lstm_tester(df_filt, insts[0])
         try:
             shutil.rmtree(conf.MODEL_DIR)  # removes the folder after the test
         except OSError as e:
@@ -108,6 +112,24 @@ class TestDataPrediction(unittest.TestCase):
             (dp_train.shape, dp_test.shape),
             ((13500, 1), (1500, 1)),
             msg='[ERROR] test_data_frame_splitter')
+
+    def test_daily_train_test(self):
+        print('[INFO] running', self.test_daily_train_test)
+        aux_list = [1.2 + 0.1 * random() for _ in range(0, 5000)]
+        df = pd.DataFrame(aux_list, columns=['_value'])
+        dicc = {'EUR_USD': df}
+        dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
+        dp.daily_train_test(train_df_dict=dicc)
+        for inst in dicc.keys():
+            self.assertTrue(os.path.exists(conf.SCALER_PATH % inst),
+                            msg='[TEST FAIL] %s file does not exist' % conf.SCALER_PATH % inst)
+            self.assertTrue(
+                os.path.exists(conf.MODEL_PATH % inst),
+                msg='[TEST FAIL] %s file does not exist' % conf.MODEL_PATH % inst)
+        try:
+            shutil.rmtree(conf.MODEL_DIR)  # removes the folder after the test
+        except OSError as e:
+            print("[ERROR] test_lstm_trainer. Deletion of the directory %s failed : %s" % (conf.MODEL_DIR, e.strerror))
 
 
 class TestDataTransformation(unittest.TestCase):

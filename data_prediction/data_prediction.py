@@ -42,15 +42,13 @@ class DataPrediction():
 
     # TODO: decorator with different filters (least squares, fourier, etc.)
     # Long Short Term Memory deep learning network. Training method.
-    def lstm_trainer(self, train_df: pd.DataFrame) -> str:
+    def lstm_trainer(self, train_df: pd.DataFrame, inst: str) -> str:
         print('[INFO] running: ', self.lstm_trainer)
-        txuslib.delete_dir(conf.MODEL_DIR)
         training_set = np.array(train_df)
         training_set = training_set.reshape(-1, 1)
         sc = MinMaxScaler(feature_range=(0, 1))
-        txuslib.create_dir(conf.MODEL_DIR)
         training_set_scaled = sc.fit_transform(training_set)
-        dump(sc, conf.SCALER_PATH)
+        dump(sc, conf.SCALER_PATH % inst)
 
         x_train = []
         y_train = []
@@ -80,7 +78,7 @@ class DataPrediction():
 
         score_train = regressor.evaluate(x_train, y_train, verbose=0)
 
-        regressor.save(conf.MODEL_PATH)
+        regressor.save(conf.MODEL_PATH % inst)
         print("[INFO] Model correctly saved to disk")
         print("[INFO] %s during training: %.2f%%" % (regressor.metrics_names[1], score_train[1]*100))
 
@@ -88,14 +86,14 @@ class DataPrediction():
 
     # TODO
     # Long Short Term Memory deep learning network. Testing method
-    def lstm_tester(self, test_df: pd. DataFrame) -> dict:
+    def lstm_tester(self, test_df: pd. DataFrame, inst: str) -> dict:
 
-        loaded_model = load_model(conf.MODEL_PATH)
+        loaded_model = load_model(conf.MODEL_PATH % inst)
         loaded_model.summary()
 
         inputs = np.array(test_df)
         inputs = inputs.reshape(-1, 1)
-        sc = load(conf.SCALER_PATH)
+        sc = load(conf.SCALER_PATH % inst)
 
         inputs = sc.transform(inputs)
 
@@ -124,6 +122,22 @@ class DataPrediction():
         # plt.show()
         return {'test_score': score_test[1]*100,
                 'predicted_data': predicted_data_set}
+
+    # TODO
+    def lstm_multistep_trainer(self):
+        pass
+
+    # TODO
+    def enc_dec_lstm_multistep_trainer(self):
+        pass
+
+    # TODO
+    def cnn_lstm_multistep_trainer(self):
+        pass
+
+    # TODO
+    def conv_lstm_multistep_trainer(self):
+        pass
 
     # predicts just one value based on a series of values inside a pandas dataframe
     # this method is thought to be called recurrently to predict a changing series in progress using "time" library
@@ -167,6 +181,7 @@ class DataPrediction():
     # TODO Unit testing
     # recovers the price data from the previous day to feed the training
     def get_training_data(self) -> dict:
+        print('[INFO] Running: %s at %s' % (self.get_training_data, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
         try:
             # Sunday's the query is different as it recovers data from Friday
             if datetime.now().strftime("%A") == 'Sunday':
@@ -183,21 +198,25 @@ class DataPrediction():
             print('[ERROR] Data could not be loaded from InfluxDB')
 
     # uses the data from previous day to train and test the prediction algorithm
-    def daily_train_test(self):
-        train_df_dict = self.get_training_data()
+    def daily_train_test(self, train_df_dict=None):
+        print('[INFO] Running: %s at %s' % (self.daily_train_test, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
+        if train_df_dict is None:
+            train_df_dict = self.get_training_data()
         split_df_dict = {}
         start_time = time.time()
-        for key in train_df_dict.keys():  # each key is a different instrument, the values are price data frames
-            split_df_dict[key] = self.data_frame_splitter(train_df_dict[key])
-            train_error = self.lstm_trainer(split_df_dict[key]['train_data'])
+        txuslib.delete_dir(conf.MODEL_DIR)  # delete data from previous day
+        txuslib.create_dir(conf.MODEL_DIR)  # create a new directory
+        for inst in train_df_dict.keys():  # each key is a different instrument, the values are price data frames
+            split_df_dict[inst] = self.data_frame_splitter(train_df_dict[inst].loc[:, ['_value']])
+            train_error = self.lstm_trainer(train_df=split_df_dict[inst]['train_data'], inst=inst)
             if float(train_error) > 1:
-                print('[WARNING] Training error > 1%')
-            test_error = self.lstm_tester(split_df_dict[key]['test_data'])['test_score']
+                print('[WARNING] Training error in instrument %s > 1%%' % inst)
+            test_error = self.lstm_tester(test_df=split_df_dict[inst]['test_data'], inst=inst)['test_score']
             if float(test_error) > 1:
-                print('[WARNING] Testing error > 1%')
+                print('[WARNING] Testing error in instrument %s > 1%%' % inst)
         train_test_duration = time.time() - start_time
         gmt = time.gmtime(train_test_duration)
-        form_gmt = time.strftime("%H hours, %M minutes, %SS seconds", gmt)
+        form_gmt = time.strftime("%H hours, %M minutes, %S seconds", gmt)
         print('[INFO] Train and test duration: ', form_gmt)
 
 

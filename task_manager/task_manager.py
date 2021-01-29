@@ -8,7 +8,7 @@ import schedule  # pip install schedule
 import config_data.constants as conf
 import pandas as pd
 from txus_library import txuslib
-
+import os
 
 class DataExtractionError(Exception):
     pass
@@ -72,7 +72,7 @@ class TaskManager:
             print('[ERROR] Data could not be transformed')
 
     # based on the last 60 values of data, predicts the next price value
-    def data_predict(self, pred_df: pd.DataFrame, model_path=conf.MODEL_PATH, scaler_path=conf.SCALER_PATH) -> float:
+    def data_predict(self, pred_df: pd.DataFrame, model_path: str, scaler_path: str) -> float:
         dp = dpred.DataPrediction(insts=self.insts, meas=self.meas, comp=self.comp, field=self.field)
         try:
             pred_price = dp.dynamic_predictor(pred_df=pred_df, model_path=model_path, scaler_path=scaler_path)
@@ -84,7 +84,6 @@ class TaskManager:
     def is_training_time(self):
         if datetime.now().strftime("%H:%M") == self.training_time:
             print('[INFO] Finished trading. Starting training now at ', self.training_time)
-            test_passed = True
             return True
         else:
             return False
@@ -97,21 +96,31 @@ class TaskManager:
         else:
             return False
 
+    def is_model_prediction_file_ready(self):
+        files_exist = []
+        for inst in self.insts:
+            exists_model: bool = os.path.exists(conf.MODEL_PATH % inst)
+            exists_scaler: bool = os.path.exists(conf.SCALER_PATH % inst)
+            files_exist.append(exists_model)
+            files_exist.append(exists_scaler)
+        return all(files_exist)
+
     # for each instrument, extracts stream data from Oanda, saves it in InfluxDB and predicts next price value
     def etp_job(self, is_etl_testing=False, is_etlp_testing=False) -> dict:  # job: Extract, Transform and Predict data
-        print('[INFO] running: ', self.etp_job)
-        print('[INFO] running: %s at %s' % (self.etp_job, datetime.now().strftime("%Y-%M-%D_%H:%M")))
+        print('[INFO] running: %s at %s' % (self.etp_job, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
         pred_df = pd.DataFrame()
         ext_df = pd.DataFrame()
         ext_dict = {}
         pred_dict = {}
         data_ext_counter = 0
+        model_ready = self.is_model_prediction_file_ready()
+        start_time = time.time()
         while True:
             ext_inst_dict = self.data_extract()
             trans_price = self.data_transform(inst_dict=ext_inst_dict)
             aux_ext_df = txuslib.df_from_inst_dict(inst_dict=ext_inst_dict, field=self.field)
             ext_df = ext_df.append(aux_ext_df, ignore_index=True)
-            if data_ext_counter >= 60:
+            if data_ext_counter >= 60 and model_ready:
                 for inst in self.insts:  # perform prediction for each instrument
                     # TODO: now data_predict can only predict one instrument, not a dict of instruments
                     # TODO: however, the rest of ETPL is prepared to manage a dictionary of instruments
@@ -121,17 +130,17 @@ class TaskManager:
                             model_path=conf.TESTING_MODEL_PATH,
                             scaler_path=conf.TESTING_SCALER_PATH)
                     else:
-                        pred_price = self.data_predict(ext_df[inst].iloc[-60:])
+                        model_path = conf.MODEL_PATH % inst
+                        scaler_path = conf.SCALER_PATH % inst
+                        pred_price = self.data_predict(
+                            pred_df=ext_df[inst].iloc[-60:],
+                            model_path=model_path,
+                            scaler_path=scaler_path)
                     pred_dict[inst] = pred_price
-            aux_pred_df = pd.DataFrame.from_dict(pred_dict)
+            aux_pred_df = pd.DataFrame([pred_dict])
             pred_df = pred_df.append(aux_pred_df, ignore_index=True)
-            print('---------------------------------------------------------------------------------------------------')
-            print('[INFO] extracted data:')
-            print(ext_df.iloc[-1:])
-            print('---------------------------------------------------------------------------------------------------')
-            print('[INFO] predicted data:')
-            print(pred_df.iloc[-1:])
-            print('---------------------------------------------------------------------------------------------------')
+            data_ext_counter += 1
+
             if self.is_training_time():
                 break
             if self.is_end_of_trading_time():
@@ -141,8 +150,30 @@ class TaskManager:
             if is_etlp_testing and data_ext_counter > 65:
                 break
 
-            data_ext_counter += 1
-            time.sleep(5)
+            print('---------------------------------------------------------------------------------------------------')
+            print('[INFO] extracted data:')
+            print(ext_df.iloc[-1:])
+            print('---------------------------------------------------------------------------------------------------')
+            print('[INFO] predicted data:')
+            print(pred_df.iloc[-1:])
+            print('---------------------------------------------------------------------------------------------------')
+            print('[INFO] Time: ', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+            # the processing time has a typical deviation of +/- 1sec. This calculation is to approx wait to 5sec
+            # and damp the deviation
+            if (time.time() - start_time) < 5:
+                time_sleep = 5 - time.time() + start_time
+            else:
+                time_sleep = 0
+            time.sleep(time_sleep)
+
+            print('[INFO] Execution duration: %s seconds' % (time.time() - start_time))
+            print('---------------------------------------------------------------------------------------------------')
+
+            start_time = time.time()
+
+
+
         return {'current_date_time': datetime.now().strftime("%Y-%M-%D_%H:%M"),
                 'extracted_data': ext_df,
                 'predicted_data': pred_df}
@@ -150,10 +181,13 @@ class TaskManager:
     # train the algorithm with data from the previous day
     # should finish the training before the planned daily start of trading
     def train_job(self):
-        print('[INFO] running: %s at %s' % (self.train_job, datetime.now().strftime("%Y-%M-%D_%H:%M")))
+        print('[INFO] running: %s at %s' % (self.train_job, datetime.now().strftime("%d/%m/%Y %H:%M:%S")))
+        start_time = time.time()
         try:
             dp = dpred.DataPrediction(insts=self.insts, comp=self.comp, meas=self.meas, field=self.field)
             dp.daily_train_test()
+            print('[INFO] Finished training. Time: ', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+            print('[INFO] Training duration: %s seconds' % (time.time() - start_time))
         except AlgorithmTrainingError:
             print('[ERROR] The prediction algorithm could not be trained')
 
