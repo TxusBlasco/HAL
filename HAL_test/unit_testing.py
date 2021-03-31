@@ -46,6 +46,12 @@ class TestDataPrediction(unittest.TestCase):
         except OSError as e:
             print("[ERROR] test_lstm_trainer. Deletion of the directory %s failed : %s" % (conf.MODEL_DIR, e.strerror))
 
+    def test_lstm_multistep_trainer(self):
+        print('[INFO] running', self.test_lstm_multistep_trainer)
+        dataset_train = pd.read_csv(conf.TESTING_TRAIN_CSV)
+        df_filt = dataset_train[['c']]
+        dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
+        score = float(dp.lstm_multistep_trainer(train_df=df_filt, inst='EUR_USD'))
 
     def test_lstm_tester(self):
         print('[INFO] running', self.test_lstm_tester)
@@ -130,6 +136,34 @@ class TestDataPrediction(unittest.TestCase):
             shutil.rmtree(conf.MODEL_DIR)  # removes the folder after the test
         except OSError as e:
             print("[ERROR] test_lstm_trainer. Deletion of the directory %s failed : %s" % (conf.MODEL_DIR, e.strerror))
+
+    def test_restructure_multistep_data(self):
+        dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
+        arr = np.array([_ for _ in range(0, 1000)])
+        lista = dp.restructure_multistep_data(train_array=arr, steps_in=60, steps_out=60)
+        np.testing.assert_array_equal([_ for _ in range(880, 940)], lista[0][-1])
+        np.testing.assert_array_equal([_ for _ in range(940, 1000)], lista[1][-1])
+
+    def test_scaler(self):
+        insts = ['EUR_USD']
+        try:
+            os.makedirs(conf.MODEL_DIR)
+        except OSError as e:
+            print("[ERROR] test_lstm_trainer. Creation of the directory %s failed : %s " % (conf.MODEL_DIR, e.strerror))
+        dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
+        for inst in insts:
+            df = pd.DataFrame([_ for _ in range(0, 1001)], columns=['inst'])
+            training_set_scaled = dp.scaler(train_df=df, inst=inst)
+            self.assertTrue(training_set_scaled[500] == 0.500)
+            self.assertTrue(training_set_scaled[971] == 0.971)
+            self.assertTrue(training_set_scaled[123] == 0.123)
+            self.assertTrue(os.path.exists(conf.SCALER_PATH % inst),
+                            msg='[TEST FAIL] %s file does not exist' % conf.SCALER_PATH % inst)
+        try:
+            shutil.rmtree(conf.MODEL_DIR)  # removes the folder after the test
+        except OSError as e:
+            print("[ERROR] test_lstm_tester. Deletion of the directory %s failed : %s" % (conf.MODEL_DIR, e.strerror))
+
 
 
 class TestDataTransformation(unittest.TestCase):
