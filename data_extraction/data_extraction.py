@@ -49,16 +49,14 @@ class DataExtraction:
                 return original
             return wrapper
 
-    # inst: trading instrument (EUR_USD, EUR_GBP, etc.)
+    # insts: list of trading instruments for example [EUR_USD, EUR_AUD, EUR_JPY]
     # gran: granularity (S5, S10, etc.)
     # comp: price comp: A (Ask), B (Bid), M (mid)
     # units : amount of an instrument to be bought
-    def __init__(self, insts: list, gran: str, comp: str, start_date=0, end_date=0):
+    def __init__(self, insts: list, gran: str, comp: str):
         self.insts = insts
         self.gran = gran
         self.comp = comp
-        self.start_date = start_date
-        self.end_date = end_date
         self.TOKEN = txuslib.get_data_from_yaml(conf.OANDA_TOKEN_PATH)['Oanda']['token']
         self.URL = conf.OANDA_TEST_ENV_URL
 
@@ -124,39 +122,72 @@ class DataExtraction:
     # gets a set of price of an instrument between two dates
     # start_date: time where to start the price collection in OANDA format: YYYY-MM-DDThh:mm:ss.000000000Z
     # end_date: time where to end the price collection in OANDA format: YYYY-MM-DDThh:mm:ss.000000000Z
-    # returns a dictionary with the prices related to their time
-    # DEPRECATED
-    def get_bulk_price_data_set(self):
+    # returns a dictionary with the prices related to their time in format:
+    '''{
+        "candles": [
+            {
+                "complete": true,
+                "mid": {
+                    "c": "1.09946",
+                    "h": "1.09949",
+                    "l": "1.09946",
+                    "o": "1.09949"
+                },
+                "time": "2016-10-17T15:16:40.000000000Z",
+                "volume": 2
+            },
+            {
+                "complete": false,
+                "mid": {
+                    "c": "1.09961",
+                    "h": "1.09961",
+                    "l": "1.09958",
+                    "o": "1.09954"
+                },
+                "time": "2016-10-17T15:17:20.000000000Z",
+                "volume": 3
+            }
+        ],
+        "granularity": "S5",
+        "instrument": "EUR/USD"
+    }'''
+    def get_bulk_price_data_set(self, inst: str, start_date: str, end_date: str) -> json:
         print("[INFO] Running ", self.get_bulk_price_data_set)
         new_json = {
             "candles": [],
             "granularity": self.gran,
-            "instrument": self.inst
+            "instrument": inst
         }
         head = {'Authorization': 'Bearer ' + self.TOKEN}
 
-        _start_date = self.start_date
-        _end_date = self.end_date
+        # add 5000 items in each loop (OANDA limit is 5000 candles per request)
+        if txuslib.is_earlier_date(start_date, end_date):
+            while txuslib.is_earlier_date(start_date, end_date):
+                get_url = \
+                    self.URL + r'/v3/instruments/' + inst + r'/candles?price=' + self.comp + r'&from=' + \
+                    txuslib.conv_oanda_json_to_x_www_form_url_encoded(start_date) + \
+                    r'&count=5000&granularity=' + self.gran
+                response = requests.get(get_url, headers=head)
+                if response.status_code != 200:
+                    print('[ERROR] Wrong status code: ', response.status_code)
+                    print('[ERROR] API returned: ', response.content)
+                    response.raise_for_status()
+                else:
+                    js = json.loads(response.content)
+                    last_date_from_json = txuslib.get_timestamp_from_last_candle(js)
+                    start_date = last_date_from_json
+                    new_json = txuslib.join_js_candles(new_json, js)
 
-        while txuslib.is_earlier_date(_start_date, _end_date):  # add 5000 items in each loop
-            get_url = \
-                self.URL + r'/v3/insts/' + self.inst + r'/candles?price=' + self.comp + r'&from=' + \
-                txuslib.conv_oanda_json_to_x_www_form_url_encoded(_start_date) + \
-                r'&count=5000&granularity=' + self.gran
-            response = requests.get(get_url, headers=head)
-            js = json.loads(response.content)
-            response.raise_for_status()
-            print("[INFO] Status code: {}".format(response.status_code))
-            last_date_from_json = txuslib.get_close_time_from_candle(js)
-            _start_date = last_date_from_json
-            new_json = txuslib.join_js_candles(new_json, js)
+        else:
+            print('[ERROR] start_date can not be later than end_date')
 
-        last_date_from_json = txuslib.get_close_time_from_candle(new_json)
-        while txuslib.is_earlier_date(_end_date, last_date_from_json):  # remove the items surpassing the end date
+        last_date_from_json = txuslib.get_timestamp_from_last_candle(new_json)
+        while txuslib.is_earlier_date(end_date, last_date_from_json):  # remove the items surpassing the end date
             new_json['candles'].pop(-1)
-            last_date_from_json = txuslib.get_close_time_from_candle(new_json)
+            last_date_from_json = txuslib.get_timestamp_from_last_candle(new_json)
 
         return new_json
+
 
 
 

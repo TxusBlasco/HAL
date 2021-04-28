@@ -17,8 +17,10 @@ SUNDAY_TRADE_TIME = '22:00'  # trade from 22:00 on Sunday to 03:00 on Monday due
 MODEL_DIR = r'model_data'
 SCALER_PATH = r'model_data\scaler_%s.joblib'
 MODEL_PATH = r'model_data\lstm_model_%s.h5'
-TESTING_TRAIN_CSV = r'testing_files_repo\data_source\EUR_USD_2019_S5_TRAIN_UNITTEST.csv'
-TESTING_TEST_CSV = r'testing_files_repo\data_source\EUR_USD_2019_S5_TEST_UNITTEST.csv'
+VANILLA_MULTISTEP_OUTPUT = r'model_data\vanilla_multistep_output.csv'
+TESTING_TRAIN_CSV = r'testing_files_repo\data_source\TRAIN_DATA_SOURCE.csv'
+TESTING_TEST_CSV = r'testing_files_repo\data_source\TEST_DATA_SOURCE.csv'
+TESTING_BULK_CSV = r'testing_files_repo\data_source\BULK_DATA_SOURCE.csv'
 TESTING_SCALER_PATH = r'testing_files_repo\model_testing_templates\scaler.joblib'
 TESTING_MODEL_PATH = r'testing_files_repo\model_testing_templates\lstm_model.h5'
 

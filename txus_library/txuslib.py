@@ -46,7 +46,6 @@ def delete_dir(path: str):
         print("[ERROR] Deletion of directory %s failed: %s" % (path, e.strerror))
 
 
-
 # takes a json file with the following format:
 #     json = {
 #         "candles": [X],
@@ -54,7 +53,7 @@ def delete_dir(path: str):
 #         "instrument": inst
 #     }
 # where X shows the candles info
-def write_json_candles_to_csv(json_file, file_path):
+def write_json_candles_to_csv(json_file: json, file_path: str):
     ordered_data = {
         'volume': [json_file['candles'][x]['volume'] for x in range(len(json_file['candles']))],
         'time': [json_file['candles'][x]['time'] for x in range(len(json_file['candles']))],
@@ -64,7 +63,10 @@ def write_json_candles_to_csv(json_file, file_path):
         'c': [json_file['candles'][x]['mid']['c'] for x in range(len(json_file['candles']))],
     }
     df = pd.DataFrame(data=ordered_data)
-    df.to_csv(file_path)
+    try:
+        df.to_csv(file_path)
+    except:
+        print('[ERROR] Could not write to CSV file')
 
 
 def get_data_from_yaml(yaml_path):
@@ -101,20 +103,16 @@ auxiliary methods for operations over the Oanda API
 '''
 
 
-# receives a json file from a get candles API request
-# retrieves the time value from the json corresponding to the close price for the last candle that is complete
-# returns that time in oanda json format
-def get_close_time_from_candle(js):
-    # print('[INFO] str(js[\'candles\'][-1][\'complete\']) =', js['candles'][-1]['complete'])
-    if js['candles'][-1]['complete'] == 'true':
-        close_time = js['candles'][-1]['time']
-        print("[INFO] Close date from last candle: {}".format(close_time))
-        return close_time
-    elif js['candles'][-2]['complete'] == 'true':
-        close_time = js['candles'][-2]['time']
-        return close_time
+# retrieves the timestamp from the last candle with "complete" status equal to true
+def get_timestamp_from_last_candle(js):
+    if str(js['candles'][-1]['complete']) == 'True':
+        last_true_time = js['candles'][-1]['time']
+        return last_true_time
+    elif str(js['candles'][-2]['complete']) == 'True':
+        last_true_time = js['candles'][-2]['time']
+        return last_true_time
     else:
-        print('[ERROR] Wrong value executing method get_close_time_from_candle')
+        print('[ERROR] Wrong value executing method get_timestamp_from_last_candle')
 
 
 # receives a json file from a get candles API request
@@ -281,11 +279,11 @@ def join_js_candles(orgnl_json, new_json):
 # compares two dates in OANDA Api format,
 # asserts True if the first one is an earlier date or False if the first one is a later date
 def is_earlier_date(earlier_date, later_date):
-    print('[INFO] executing method: is earlier_date(earlier_date, later_date)')
     if get_nb_seconds_1900(earlier_date) < get_nb_seconds_1900(later_date):
         return True
     else:
         return False
+
 
 ''' 
 #######################################################################################################################

@@ -59,7 +59,7 @@ class TestDataPrediction(unittest.TestCase):
         try:
             os.makedirs(conf.MODEL_DIR)
         except OSError as e:
-            print("[ERROR] test_lstm_trainer. Creation of the directory %s failed : %s " % (conf.MODEL_DIR, e.strerror))
+            print("[ERROR] test_lstm_tester. Creation of the directory %s failed : %s " % (conf.MODEL_DIR, e.strerror))
         for inst in insts:
             shutil.copyfile(conf.TESTING_MODEL_PATH, conf.MODEL_PATH % inst)
             shutil.copyfile(conf.TESTING_SCALER_PATH, conf.SCALER_PATH % inst)
@@ -76,6 +76,34 @@ class TestDataPrediction(unittest.TestCase):
             print("[ERROR] test_lstm_tester. Deletion of the directory %s failed : %s" % (conf.MODEL_DIR, e.strerror))
         self.assertTrue(ret['test_score'] < 2, msg='[ERROR] test_lstm_tester. Calculation error is higher than 1%')
         self.assertTrue(type(ret['predicted_data']) == np.ndarray, msg='[ERROR] test_lstm_tester. Return is not a list')
+
+    def test_lstm_multistep_tester(self):
+        print('[INFO] running', self.test_lstm_multistep_tester)
+        insts = ['EUR_USD']
+        try:
+            os.makedirs(conf.MODEL_DIR)
+        except OSError as e:
+            print("[ERROR] test_lstm_multistep_tester. "
+                  "Creation of the directory %s failed : %s " % (conf.MODEL_DIR, e.strerror))
+        for inst in insts:
+            shutil.copyfile(conf.TESTING_MODEL_PATH, conf.MODEL_PATH % inst)
+            shutil.copyfile(conf.TESTING_SCALER_PATH, conf.SCALER_PATH % inst)
+
+        dataset_test = pd.read_csv(conf.TESTING_TEST_CSV)
+
+        df_filt = dataset_test[['c']].iloc[-120:]
+        df_filt = df_filt.reset_index(drop=True)
+        dp = dpred.DataPrediction(insts=insts, meas='raw_price', comp='M', field='close')
+        ret = dp.lstm_multistep_tester(df_filt, insts[0])
+        try:
+            shutil.rmtree(conf.MODEL_DIR)  # removes the folder after the test
+        except OSError as e:
+            print("[ERROR] test_lstm_multistep_tester. "
+                  "Deletion of the directory %s failed : %s" % (conf.MODEL_DIR, e.strerror))
+        self.assertTrue(ret['test_score'] < 2, msg='[ERROR] test_lstm_multistep_tester. '
+                                                   'Calculation error is higher than 1%')
+        self.assertTrue(type(ret['predicted_data']) == np.ndarray, msg='[ERROR] test_lstm_multistep_tester. '
+                                                                       'Return is not a list')
 
     def test_dynamic_predictor(self):
         print('[INFO] running', self.test_dynamic_predictor)
@@ -140,7 +168,7 @@ class TestDataPrediction(unittest.TestCase):
     def test_restructure_multistep_data(self):
         dp = dpred.DataPrediction(insts=['EUR_USD'], meas='raw_price', comp='M', field='close')
         arr = np.array([_ for _ in range(0, 1000)])
-        lista = dp.restructure_multistep_data(train_array=arr, steps_in=60, steps_out=60)
+        lista = dp.to_supervised(t_array=arr, steps_in=60, steps_out=60)
         np.testing.assert_array_equal([_ for _ in range(880, 940)], lista[0][-1])
         np.testing.assert_array_equal([_ for _ in range(940, 1000)], lista[1][-1])
 
@@ -318,7 +346,7 @@ class TestTxuslib(unittest.TestCase):
                 }
             ]
         }
-        self.assertEqual("2016-10-17T15:17:15.000000000Z", txuslib.get_close_time_from_candle(self.json_file))
+        self.assertEqual("2016-10-17T15:17:15.000000000Z", txuslib.get_timestamp_from_last_candle(self.json_file))
 
     def test_get_close_price_from_candle(self):
         print('[INFO] running', self.test_get_close_price_from_candle)
